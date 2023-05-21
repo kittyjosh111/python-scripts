@@ -1,0 +1,3 @@
+requests
+country-converter
+pygal_maps_world
