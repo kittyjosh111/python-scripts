@@ -6,6 +6,8 @@ import json
 import requests
 import country_converter as coco
 from pygal.maps.world import World
+from pygal.style import Style
+from datetime import date
 
 def get_country_code(name):
 	## Reads mappings.json to get the existing dictionary of country codes.
@@ -34,15 +36,16 @@ def get_cases(dataset):
 	list_of_countries = list(dataset.keys()) # gets the list of countries in the dataset
 	for keys, values in dataset.items(): # values is the dictionary assigned to each country
 		country_code = get_country_code(keys)
-		for country in list_of_countries:
-			cases = 0 # first make a blank variable per run
-			data = values['data'] # the data we want is in the list paired to key 'data'
-			for each in data:
-				try:
-					cases = cases + int(each['new_cases']) # add the new_cases value to the cases variable
-				except KeyError:
-					pass
-		overall_data[country_code] = cases # add the pygal code and cases value to the dictionary
+		if country_code:
+			for country in list_of_countries:
+				cases = 0 # first make a blank variable per run
+				data = values['data'] # the data we want is in the list paired to key 'data'
+				for each in data:
+					try:
+						cases = cases + int(each['new_cases']) # add the new_cases value to the cases variable
+					except KeyError:
+						pass
+			overall_data[country_code] = cases # add the pygal code and cases value to the dictionary
 	return overall_data
 
 def check_mapping_json():
@@ -74,11 +77,44 @@ def check_data_json():
 			print('Could not download.')
 			quit()
 
+def make_categories():
+	## Create a heatmap using the (max - min) cases / 5 categories
+	interval_one = {}
+	interval_two = {}
+	interval_three = {}
+	interval_four = {}
+	interval_five = {}
+	# now, we use math to get the limits for each interval
+	overall_data = get_cases(load_data())
+	max_cases = max(list(overall_data.values()))
+	min_cases = min(list(overall_data.values()))
+	interval = int((max_cases - min_cases)/5)
+	# with that, we put countries into their intervals using their case count
+	for key, value in overall_data.items():
+		if value >= min_cases and value < min_cases + interval:
+			interval_one[key] = value
+		elif value >= min_cases + interval and value < min_cases + 2*interval:
+			interval_two[key] = value
+		elif value >= min_cases + 2*interval and value < min_cases + 3*interval:
+			interval_three[key] = value
+		elif value >= min_cases + 3*interval and value < min_cases + 4*interval:
+			interval_four[key] = value
+		elif value >= min_cases + 4*interval and value <= max_cases:
+			interval_five[key] = value	
+	return (max_cases, min_cases, interval, interval_one, interval_two, interval_three, interval_four, interval_five)
+
 def make_svg():
 	## Function to make the worldmap visual and save as covidmap.svg
-	wm = World()
-	wm.title = "COVID-19 Cases by Country"
-	wm.add('Cases', get_cases(load_data()))
+	custom_style = Style(legend_font_size=12, colors=('#FFD970', '#FFBC0A', '#EC7D10', '#FF481F', '#FF0000'))
+	(max_cases, min_cases, interval, i1, i2, i3, i4, i5) = make_categories()
+	wm = World(style=custom_style)
+	date_string = date.today().strftime("%B %d, %Y")
+	wm.title = "COVID-19 Cases by Country as of " + str(date_string)
+	wm.add(str(int(min_cases/1000000)) + ' - ' + str(int((min_cases + interval)/1000000)) + 'M cases', i1)
+	wm.add(str(int((min_cases + interval)/1000000)) + ' - ' + str(int((min_cases + 2*interval)/1000000)) + 'M cases', i2)
+	wm.add(str(int((min_cases + 2*interval)/1000000)) + ' - ' + str(int((min_cases + 3*interval)/1000000)) + 'M cases', i3)
+	wm.add(str(int((min_cases + 3*interval)/1000000)) + ' - ' + str(int((min_cases + 4*interval)/1000000)) + 'M cases', i4)
+	wm.add(str(int((min_cases + 4*interval)/1000000)) + ' - ' + str(int(max_cases/1000000)) + 'M cases', i5)
 	wm.render_to_file('covidmap.svg')
 	print("SVG saved. It is titled 'covidmap.svg'")
 
